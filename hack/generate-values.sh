@@ -13,6 +13,10 @@ flags:
       (required) Root DNS domain name for the CF install
       (e.g. if CF API at api.inglewood.k8s-dev.relint.rocks, cf-domain = inglewood.k8s-dev.relint.rocks)
 
+      --app-domain
+      (optional) Root DNS domain name for the CF applications, defaults to --cf-domain value.
+      (e.g. if app is myapp.turtleneck.k8s-dev.relint.rocks, app-domain = turtleneck.k8s-dev.relint.rocks)
+
   -g, --gcr-service-account-json
       (optional) Filepath to the GCP Service Account JSON describing a service account
       that has permissions to write to the project's container repository.
@@ -38,6 +42,15 @@ case $i in
   shift
   shift
   ;;
+  --app-domain=*)
+  APP_DOMAIN="${i#*=}"
+  shift
+  ;;
+  --app-domain)
+  APP_DOMAIN="${2}"
+  shift
+  shift
+  ;;
   -g=*|--gcr-service-account-json=*)
   GCP_SERVICE_ACCOUNT_JSON="${i#*=}"
   shift
@@ -59,6 +72,7 @@ if [[ -z ${DOMAIN:=} ]]; then
   echo "Missing required flag: -d / --cf-domain" >&2
   exit 1
 fi
+APP_DOMAIN=${APP_DOMAIN:-$DOMAIN}
 
 if [[ -n ${GCP_SERVICE_ACCOUNT_JSON:=} ]]; then
   if [[ ! -r ${GCP_SERVICE_ACCOUNT_JSON} ]]; then
@@ -103,6 +117,16 @@ variables:
     alternative_names:
     - "*.${DOMAIN}"
     - "*.cf-system.svc.cluster.local"
+    extended_key_usage:
+    - client_auth
+    - server_auth
+- name: apps_certificate
+  type: certificate
+  options:
+    ca: default_ca
+    common_name: "*.${APP_DOMAIN}"
+    alternative_names:
+    - "*.${APP_DOMAIN}"
     extended_key_usage:
     - client_auth
     - server_auth
@@ -186,7 +210,7 @@ cat <<EOF
 system_domain: "${DOMAIN}"
 app_domains:
 #@overlay/append
-- "${DOMAIN}"
+- "${APP_DOMAIN}"
 cf_admin_password: $( bosh interpolate ${VARS_FILE} --path=/cf_admin_password )
 
 cf_blobstore:
@@ -208,6 +232,12 @@ system_certificate:
   crt: &crt $( bosh interpolate ${VARS_FILE} --path=/system_certificate/certificate | base64 | tr -d '\n' )
   key: &key $( bosh interpolate ${VARS_FILE} --path=/system_certificate/private_key | base64 | tr -d '\n' )
   ca: $( bosh interpolate ${VARS_FILE} --path=/system_certificate/ca | base64 | tr -d '\n' )
+
+apps_certificate:
+  #! This certificates and keys are base64 encoded and should be valid for *.apps.cf.example.com
+  crt: $( bosh interpolate ${VARS_FILE} --path=/apps_certificate/certificate | base64 | tr -d '\n' )
+  key: $( bosh interpolate ${VARS_FILE} --path=/apps_certificate/private_key | base64 | tr -d '\n' )
+  ca:  $( bosh interpolate ${VARS_FILE} --path=/apps_certificate/ca | base64 | tr -d '\n' )
 
 log_cache_ca:
   crt: $( bosh interpolate ${VARS_FILE} --path=/log_cache_ca/certificate | base64 | tr -d '\n' )

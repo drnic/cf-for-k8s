@@ -1,6 +1,9 @@
 apiVersion: vendir.k14s.io/v1alpha1
 directories:
 - contents:
+  - githubRelease:
+      url: https://api.github.com/repos/k14s/secretgen-controller/releases/25061781
+    path: github.com/k14s/secretgen-controller
   - git:
       commitTitle: Update install manifest to v0.4.0.
       sha: eacb75b4d562e3fb158eb2147a6768407ab374d4
